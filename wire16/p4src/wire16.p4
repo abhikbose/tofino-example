@@ -1,3 +1,5 @@
+// typedef bit<9> PortId_t defined by default
+
 #include <core.p4>
 #include <tna.p4>
 
@@ -72,7 +74,7 @@ control SwitchIngress(
 
         actions = {
             act_forward;
-	    nop;
+            nop;
         }
 
         const default_action = nop();
