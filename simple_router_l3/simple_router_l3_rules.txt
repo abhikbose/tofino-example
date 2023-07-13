@@ -3,17 +3,15 @@ ucli
 pm
 show
 
-
-port-add 49/- 40G NONE
-an-set 49/- 2
-port-enb 49/-
-port-add 50/- 40G NONE  
-an-set 50/- 1         
-port-enb 50/-        
-port-add 51/- 40G NONE
-an-set 51/- 1         
-port-enb 51/-
-
+port-add 1/0 10G NONE
+an-set 1/0 2
+port-enb 1/0
+port-add 2/0 10G NONE  
+an-set 2/0 2         
+port-enb 2/0         
+port-add 3/0 10G NONE
+an-set 3/0 2         
+port-enb 3/0
 
 port-add 57/- 10G NONE
 an-set 57/- NONE
@@ -26,23 +24,56 @@ exit
 
 bfrt_python
 
-bfrt.simple_router_l3.pipe.RouterIngress.arp_tbl.add_with_arp_act('192.168.1.2','3c:fd:fe:9e:7e:34')	# Turing_02 ens261f0
-bfrt.simple_router_l3.pipe.RouterIngress.arp_tbl.add_with_arp_act('192.168.2.2','3c:fd:fe:9e:7b:5c')	# Turing_04 ens259f0
-bfrt.simple_router_l3.pipe.RouterIngress.arp_tbl.add_with_arp_act('192.168.3.2','3c:fd:fe:9e:7b:84')	# Turing_05 ens259f0
+bfrt.simple_router_l3.pipe.RouterIngress.arp_tbl.add_with_arp_act('192.168.1.2','00:15:4d:13:81:9a')
+bfrt.simple_router_l3.pipe.RouterIngress.arp_tbl.add_with_arp_act('192.168.3.2','00:15:4d:13:81:d3')
+bfrt.simple_router_l3.pipe.RouterIngress.arp_tbl.add_with_arp_act('192.168.2.2','00:a0:c9:00:00:00')	# Tofino CPU port 0
 
-bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act('192.168.3.2', 32, 176)
-bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act("192.168.2.2", 32, 44)
-bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act("192.168.1.2", 32, 28)
-bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act("192.170.0.0", 16, 44)
-bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act("192.171.0.0", 16, 44)
-bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act("192.172.0.0", 16, 44)
-bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act("192.173.0.0", 16, 44)
-bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act("192.174.0.0", 16, 44)
-bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act("192.175.0.0", 16, 44)
-bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act("192.176.0.0", 16, 44)
-bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act("192.177.0.0", 16, 44)
-bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act("192.178.0.0", 16, 44)
-bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act("192.179.0.0", 16, 44)
-bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act("192.180.0.0", 16, 44)
+bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act('192.168.3.2', 133)
+bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act("192.168.2.2", 64)
+bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act("192.168.1.2", 135)
 
 # Check rules
+
+
+
+
+========== Config to run between two CPU ports in different namespace ==========
+# Interface configuration
+# Configuration
+# enp4s0f0 => Port 64 => IP 192.168.0.1 => root NS
+# enp4s0f1 => Port 65 => IP 192.168.0.2 => v1 NS
+ethtool -K enp4s0f0 tx off rx off
+ifconfig enp4s0f0 192.168.0.1/24
+ip netns add v1
+ip link set enp4s0f1 netns v1
+ip netns exec v1 ethtool -K enp4s0f1 tx off rx off
+ip netns exec v1 ifconfig enp4s0f1 192.168.0.2/24
+ip netns exec v1 lo up
+
+ucli
+pm
+port-add 57/- 10G NONE
+an-set 57/- NONE
+port-enb 57/-
+show
+exit
+
+bfrt_python
+
+# Common rules
+bfrt.simple_router_l3.pipe.RouterIngress.arp_tbl.add_with_arp_act('192.168.0.1','00:a0:c9:00:00:00')
+bfrt.simple_router_l3.pipe.RouterIngress.arp_tbl.add_with_arp_act('192.168.0.2','34:12:78:56:01:00')
+
+# Rules for exact matching
+bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act('192.168.0.1', 64)
+bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act("192.168.0.2", 65)
+
+# Rules for lpm matching
+# (Match, prefix, argument)
+bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act('192.168.0.1', 32, 64)
+bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act("192.168.0.2", 32, 65)
+
+# Rules for ternary matching
+# (Match, Mask, Priority, argument)
+bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act('10.10.0.1', 0x0000FFFF, 0, 64)
+bfrt.simple_router_l3.pipe.RouterIngress.tbl_l3_routes.add_with_l3_routes_act("10.10.0.2", 0x0000FFFF, 0, 65)

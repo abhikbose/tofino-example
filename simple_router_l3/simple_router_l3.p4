@@ -1,6 +1,11 @@
 #include <core.p4>
 #include <tna.p4>
 
+# Choose any one
+// #define MATCH_TYPE exact
+// #define MATCH_TYPE lpm
+#define MATCH_TYPE ternary
+
 #define TYPE_IPV4 0x0800
 #define TYPE_ARP 0x0806
 
@@ -109,6 +114,7 @@ parser EgressParser(
         out egress_metadata_t eg_md,
         out egress_intrinsic_metadata_t eg_intr_md) {
     state start {
+        pkt.extract(eg_intr_md);
         transition accept;
     }
 }
@@ -118,7 +124,9 @@ control EgressDeparser(
         inout egress_header_t hdr,
         in egress_metadata_t eg_md,
         in egress_intrinsic_metadata_for_deparser_t ig_intr_dprs_md) {
-    apply {}
+    apply {
+        pkt.emit(hdr);
+    }
 }
 
 control RouterEgress(
@@ -190,7 +198,7 @@ control RouterIngress(
     // This is currently dealing both L3 and L2
     table tbl_l3_routes {
         key = {
-            hdr.ipv4.dstAddr : exact;
+            hdr.ipv4.dstAddr : MATCH_TYPE;
         }
 
         actions = {
@@ -215,8 +223,6 @@ control RouterIngress(
         else{
             ig_dprsr_md.drop_ctl = 1;
         }
-        // Skip egress processing
-        ig_tm_md.bypass_egress = 1w1;
     }
 }
 
