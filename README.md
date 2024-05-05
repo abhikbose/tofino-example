@@ -11,3 +11,6 @@ This code matches the destination IPv4 of an incoming packet and send it to igre
 
 ### mac_router
 This code performs MAC based routing similar to `simple_l3_router`, except it matches destination MAC of the incoming packet instead of destionation IPv4. This code also handles ARP at the Tofino switch and comes with `Python` based control plane rules.
+
+### wire_recirculate
+This code shows how to set a Tofino front panel port in loopback mode and achieve recirculation using that loopback port. This also has an example use of a `DirectCounter` extern.

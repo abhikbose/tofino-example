@@ -5,7 +5,16 @@
 
 // typedefs and #defines
 typedef bit<48> mac_addr_t;
-#define ETHER_TYPE_RCLT 1000 // Any dummy value is ok
+typedef bit<32> ip4Addr_t;
+#define ETH_TYPE_IPV4   0x800
+#define ETH_TYPE_ARP    0x0806
+#define ETH_TYPE_RCLT   0x1000
+
+#define IP_PROTOCOLS_ICMP 1
+#define IP_PROTOCOLS_TCP 6
+#define IP_PROTOCOLS_UDP 17
+
+#define IP_ID_RCLT      1000
 
 //######## Header definations #############
 header ethernet_h {
@@ -14,14 +23,32 @@ header ethernet_h {
     bit<16> ether_type;
 }
 
+header ipv4_t {
+    bit<4>    version;
+    bit<4>    ihl;
+    bit<8>    diffserv;
+    bit<16>   totalLen;
+    bit<16>   identification;
+    bit<3>    flags;
+    bit<13>   fragOffset;
+    bit<8>    ttl;
+    bit<8>    protocol;
+    bit<16>   hdrChecksum;
+    ip4Addr_t srcAddr;
+    ip4Addr_t dstAddr;
+}
+
 header rclt_t {
     bit<16> rclt_count;
-    bit<16> ether_type;
+    // bit<16> ether_type;
+    // bit<48> mac_src_addr;
     bit<16> dport;
+    bit<16> ipv4_id;
 }
 
 struct header_t {
     ethernet_h ethernet;
+    ipv4_t     ipv4;
     rclt_t     rclt;
 }
 
@@ -46,10 +73,18 @@ parser SwitchIngressParser(
 	state parse_ethernet {
 		pkt.extract(hdr.ethernet);
 		transition select(hdr.ethernet.ether_type){
-            ETHER_TYPE_RCLT: parse_rclt;
+            ETH_TYPE_IPV4: parse_ipv4;
             default: accept;
         }
 	}
+
+    state parse_ipv4 {
+        pkt.extract(hdr.ipv4);
+        transition select(hdr.ipv4.identification){
+            IP_ID_RCLT: parse_rclt;
+            default: accept;
+        }
+    }
 
     state parse_rclt{
         pkt.extract(hdr.rclt);
@@ -79,8 +114,9 @@ control SwitchIngress(
 
     // Counter to count recirculate and normal packet
     // Index 0 for new packets, index 1 for total number of recircultation
-    Counter<bit<32>, bit<8>>(2, CounterType_t.PACKETS_AND_BYTES) c_rclt;
+    // Counter<bit<32>, bit<8>>(2, CounterType_t.PACKETS_AND_BYTES) c_rclt;
     DirectCounter<bit<32>>(CounterType_t.PACKETS_AND_BYTES) c_rclt_forward;
+    
     action nop() {
         c_rclt_forward.count();
     }
@@ -90,9 +126,13 @@ control SwitchIngress(
         c_rclt_forward.count();
         ig_tm_md.ucast_egress_port = iface_rclt;
         hdr.rclt.rclt_count = hdr.rclt.rclt_count + 1;
-        hdr.rclt.ether_type = hdr.ethernet.ether_type;
         hdr.rclt.dport = dport;
-        hdr.ethernet.ether_type = ETHER_TYPE_RCLT;
+        // hdr.rclt.ether_type = hdr.ethernet.ether_type;
+        // hdr.rclt.mac_src_addr = hdr.ethernet.src_addr;
+        hdr.rclt.ipv4_id = hdr.ipv4.identification;
+        // hdr.ethernet.ether_type = ETHER_TYPE_RCLT;
+        // hdr.ethernet.src_addr = ETHER_SRC_ADDR_RCLT;
+        hdr.ipv4.identification = IP_ID_RCLT;
     }
 
     action act_continue_rclt (PortId_t iface_rclt){
@@ -106,7 +146,9 @@ control SwitchIngress(
         // c_rclt.count(1);
         c_rclt_forward.count();
         ig_tm_md.ucast_egress_port = (PortId_t)hdr.rclt.dport;
-        hdr.ethernet.ether_type = hdr.rclt.ether_type;
+        // hdr.ethernet.ether_type = hdr.rclt.ether_type;
+        // hdr.ethernet.src_addr = hdr.rclt.mac_src_addr;
+        hdr.ipv4.identification = hdr.rclt.ipv4_id;
         hdr.rclt.setInvalid();
     }
 
@@ -128,18 +170,38 @@ control SwitchIngress(
         counters = c_rclt_forward;
     }
 
-	apply {
-        if (!hdr.rclt.isValid()){
-            // Initialize rclt header if it is not valid already
-            hdr.rclt.setValid();
-            hdr.rclt.rclt_count = 0;
+    action act_wire(PortId_t dport){
+        ig_tm_md.ucast_egress_port = dport;
+    }
+
+    table tbl_wire {
+        key = {
+            ig_intr_md.ingress_port : exact;
         }
 
-        // Apply the tbl_rclt_forward table
-		tbl_rclt_forward.apply();
+        actions = {
+            act_wire;
+        }
 
-		// Skip egress processing
-		// ig_tm_md.bypass_egress = 1w1;
+        size = 16;
+    }
+
+	apply {
+        if (hdr.ipv4.isValid()){
+            if (!hdr.rclt.isValid()){
+                // Initialize rclt header if it is not valid already
+                hdr.rclt.setValid();
+                hdr.rclt.rclt_count = 0;
+            }
+
+            // Apply the tbl_rclt_forward table
+            tbl_rclt_forward.apply();
+
+		}
+        else{
+            // This will handle arp and garbage non-ipv4 packets
+            tbl_wire.apply();
+        }
 	}
 }
 
