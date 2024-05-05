@@ -14,3 +14,7 @@ This code performs MAC based routing similar to `simple_l3_router`, except it ma
 
 ### wire_recirculate
 This code shows how to set a Tofino front panel port in loopback mode and achieve recirculation using that loopback port. This also has an example use of a `DirectCounter` extern.
+
+
+# License
+GNU General Public License, version 3 (GPL-3.0) or, at your option, any later version.
